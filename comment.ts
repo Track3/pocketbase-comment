@@ -1,17 +1,16 @@
 // @deno-types="https://unpkg.com/pocketbase@0.8.0/dist/pocketbase.es.d.ts"
 import PocketBase from "https://unpkg.com/pocketbase@0.8.0/dist/pocketbase.es.mjs";
-import { config } from "https://deno.land/std/dotenv/mod.ts";
 import { serve } from "https://deno.land/std/http/server.ts";
 import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
+import "https://deno.land/std/dotenv/load.ts"
 
-const configData = await config();
-const allowOrigin = ["http://localhost:5173", configData["ALLOW_ORIGIN"]];
+const allowOrigin = ["http://localhost:5173", Deno.env.get("ALLOW_ORIGIN")];
 let allowedOrigin = "*";
 
-const pb = new PocketBase(configData["PB_URL"]);
+const pb = new PocketBase(Deno.env.get("PB_URL"));
 const _authData = await pb.collection("users").authWithPassword(
-  configData["PB_USER"],
-  configData["PB_PASSWORD"],
+  Deno.env.get("PB_USER"),
+  Deno.env.get("PB_PASSWORD"),
 );
 
 async function handler(req: Request): Promise<Response> {
