@@ -1,10 +1,10 @@
-// @deno-types="https://unpkg.com/pocketbase@0.8.0/dist/pocketbase.es.d.ts"
-import PocketBase from "https://unpkg.com/pocketbase@0.8.0/dist/pocketbase.es.mjs";
+// @deno-types="https://unpkg.com/pocketbase@0.8.3/dist/pocketbase.es.d.ts"
+import PocketBase from "https://unpkg.com/pocketbase@0.8.3/dist/pocketbase.es.mjs";
 import { serve } from "https://deno.land/std/http/server.ts";
 import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
-import "https://deno.land/std/dotenv/load.ts"
+import "https://deno.land/std/dotenv/load.ts";
 
-const allowOrigin = ["http://localhost:5173", Deno.env.get("ALLOW_ORIGIN")];
+const allowOrigin = Deno.env.get("ALLOW_ORIGIN")?.split(",");
 let allowedOrigin = "*";
 
 const pb = new PocketBase(Deno.env.get("PB_URL"));
@@ -13,14 +13,28 @@ const _authData = await pb.collection("users").authWithPassword(
   Deno.env.get("PB_PASSWORD"),
 );
 
+// Validate Url
+const isValidUrl = (url) => {
+  if (url === "") {
+    return true; // "website" filed is optional
+  } else {
+    try {
+      new URL(url);
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+    return true;
+  }
+};
+
 async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  console.log(req.method, url.pathname, "uri:", url.searchParams.get("uri"));
+  // console.log(req.method, url.pathname, "uri:", url.searchParams.get("uri"));
 
   const reqestOrigin = req.headers.get("origin");
-
   if (reqestOrigin === null || !allowOrigin.includes(reqestOrigin)) {
-    return new Response("Request is rejected.");
+    return new Response("Request is rejected due to CORS policy.");
   } else {
     allowedOrigin = reqestOrigin;
   }
@@ -85,6 +99,8 @@ async function handler(req: Request): Promise<Response> {
 
     if (!newComment.author || !newComment.email || !newComment.content) {
       return new Response("名字、邮箱、评论内容不能为空");
+    } else if (!isValidUrl(newComment.website)) {
+      return new Response("网址格式错误");
     } else {
       const record = await pb.collection("comments").create({
         "uri": newComment.uri,
