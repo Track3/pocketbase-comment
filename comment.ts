@@ -5,6 +5,7 @@ import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
 import "https://deno.land/std/dotenv/load.ts";
 
 const allowOrigin = Deno.env.get("ALLOW_ORIGIN")?.split(",");
+const webhookUrl = Deno.env.get("WEBHOOK_URL");
 let allowedOrigin = "*";
 
 const pb = new PocketBase(Deno.env.get("PB_URL"));
@@ -14,7 +15,7 @@ const _authData = await pb.collection("users").authWithPassword(
 );
 
 // Validate Url
-const isValidUrl = (url) => {
+const isValidUrl = (url: string) => {
   if (url === "") {
     return true; // "website" filed is optional
   } else {
@@ -119,6 +120,14 @@ async function handler(req: Request): Promise<Response> {
         content: record.content,
         created: record.created,
       });
+
+      if (webhookUrl) {
+        fetch(webhookUrl, {
+          method: "POST",
+          body: body,
+        });
+      }
+
       return new Response(body, {
         status: 200,
         headers: {
