@@ -5,7 +5,7 @@
 
   const url = document.getElementById('comments').dataset.url;
   setContext("pageUri", window.location.pathname);
-  setContext("reqUrl", `${url}?uri=${encodeURIComponent(getContext("pageUri"))}`);
+  setContext("reqUrl", `${url}/?uri=${encodeURIComponent(getContext("pageUri"))}`);
   let count: number;
   let comments = []
 
