@@ -5,13 +5,13 @@ go 1.20
 require (
 	github.com/labstack/echo/v5 v5.0.0-20220201181537-ed2888cfa198
 	github.com/pocketbase/dbx v1.10.0
-	github.com/pocketbase/pocketbase v0.13.4
+	github.com/pocketbase/pocketbase v0.14.0
 )
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.6 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
-	github.com/aws/aws-sdk-go v1.44.228 // indirect
+	github.com/aws/aws-sdk-go v1.44.230 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.17.7 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.18.19 // indirect
@@ -32,7 +32,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.18.7 // indirect
 	github.com/aws/smithy-go v1.13.5 // indirect
 	github.com/disintegration/imaging v1.6.2 // indirect
-	github.com/domodwyer/mailyak/v3 v3.4.0 // indirect
+	github.com/domodwyer/mailyak/v3 v3.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
@@ -72,7 +72,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.114.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20230323212658-478b75c54725 // indirect
+	google.golang.org/genproto v0.0.0-20230327215041-6ac7f18bb9d5 // indirect
 	google.golang.org/grpc v1.54.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	lukechampine.com/uint128 v1.3.0 // indirect
