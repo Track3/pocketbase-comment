@@ -25,6 +25,9 @@
       {:else}
       <span>{data.author}</span>
       {/if}
+      {#if data.is_mod}
+      <small title="MOD">🪄</small>
+      {/if}
       <span> &#183; </span>
       <span class="comment-date" title={fullDate.toString()}>{displayDate}</span>
     </header>

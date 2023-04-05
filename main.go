@@ -25,6 +25,7 @@ type comment struct {
 	Avatar  string    `json:"avatar"`
 	Website string    `json:"website"`
 	Content string    `json:"content"`
+	IsMod   bool      `json:"is_mod"`
 	Reply   []comment `json:"reply"`
 }
 
@@ -66,6 +67,7 @@ func main() {
 					emailHash,
 					v.GetString("website"),
 					v.GetString("content"),
+					v.GetBool("is_mod"),
 					[]comment{},
 				}
 
@@ -127,6 +129,7 @@ func main() {
 				emailHash,
 				record.GetString("website"),
 				record.GetString("content"),
+				record.GetBool("is_mod"),
 				[]comment{},
 			}
 
