@@ -16,7 +16,7 @@
 
 <article id="{data.id}">
   <aside class="comment-avatar">
-    <img src="https://gravatar.loli.net/avatar/{data.avatar}?d=mp" alt="{data.author}的头像" loading="lazy">
+    <img src="https://cravatar.cn/avatar/{data.avatar}?d=mp" alt="{data.author}的头像" loading="lazy">
   </aside>
   <div class="comment-wrapper">
     <header>
@@ -26,7 +26,7 @@
       <span>{data.author}</span>
       {/if}
       {#if data.is_mod}
-      <small title="MOD">🪄</small>
+      <small title="MOD">🚩</small>
       {/if}
       <span> &#183; </span>
       <span class="comment-date" title={fullDate.toString()}>{displayDate}</span>
