@@ -68,18 +68,18 @@
   </div>
   {/if}
   <div class=form-wrapper>
-    <label for="name">
+    <label for="author">
       名字<span class="required" aria-hidden="true">*</span>
-      <input type="text" name="author" placeholder="John Doe" bind:value={newComment.author} required>
+      <input type="text" name="author" id="author" autocomplete="username" placeholder="John Doe" bind:value={newComment.author} required>
     </label>
     <label for="email">
       邮箱<span class="required" aria-hidden="true">*</span>
-      <input type="email" name="email" placeholder="someone@example.com" bind:value={newComment.email} required>
+      <input type="email" name="email" id="email" autocomplete="email" placeholder="someone@example.com" bind:value={newComment.email} required>
     </label>
   </div>
   <label for="website">
     网址
-    <input type="url" name="website" placeholder="https://example.com" bind:value={newComment.website}>
+    <input type="url" name="website" id="website" autocomplete="url" placeholder="https://example.com" bind:value={newComment.website}>
   </label>
   <div class=form-wrapper>
     <button type="button" on:click={()=>{showPreview = !showPreview}}>
