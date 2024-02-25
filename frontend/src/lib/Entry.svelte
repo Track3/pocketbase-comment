@@ -16,7 +16,7 @@
 
 <article id="{data.id}">
   <aside class="comment-avatar">
-    <img src="https://cravatar.cn/avatar/{data.avatar}?d=mp" alt="{data.author}的头像" loading="lazy">
+    <img src="https://seccdn.libravatar.org/avatar/{data.avatar}?d=retro" alt="{data.author}的头像" loading="lazy">
   </aside>
   <div class="comment-wrapper">
     <header>
