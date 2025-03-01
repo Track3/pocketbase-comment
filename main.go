@@ -8,13 +8,10 @@ import (
 	"net/mail"
 	"os"
 
-	"github.com/labstack/echo/v5"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/forms"
-	"github.com/pocketbase/pocketbase/models"
 	"github.com/pocketbase/pocketbase/tools/mailer"
 )
 
@@ -41,17 +38,18 @@ type newComment struct {
 func main() {
 	app := pocketbase.New()
 
-	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+	// app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 
 		// serves static files from the provided public dir (if exists)
-		e.Router.GET("/*", apis.StaticDirectoryHandler(os.DirFS("./pb_public"), true))
+		se.Router.GET("/{path...}", apis.Static(os.DirFS("./pb_public"), true))
 
 		// get comments of a page
-		e.Router.GET("api/comment", func(c echo.Context) error {
-			uri := c.QueryParam("uri")
+		se.Router.GET("/api/comment/", func(e *core.RequestEvent) error {
+			uri := e.Request.URL.Query().Get("uri")
 			commentList := []comment{}
 
-			records, err := app.Dao().FindRecordsByExpr("comments",
+			records, err := app.FindAllRecords("comments",
 				dbx.HashExp{"uri": uri},
 			)
 			if err != nil {
@@ -87,27 +85,24 @@ func main() {
 				Count int       `json:"count"`
 				List  []comment `json:"list"`
 			}{len(records), commentList}
-			return c.JSON(200, body)
-		},
-			apis.ActivityLogger(app),
-		)
+			return e.JSON(http.StatusOK, body)
+		})
 
 		// handle new comment
-		e.Router.POST("api/comment", func(c echo.Context) error {
+		se.Router.POST("/api/comment/", func(e *core.RequestEvent) error {
 
 			newComment := new(newComment)
-			if err := c.Bind(newComment); err != nil {
-				return c.String(http.StatusBadRequest, "bad request")
+			if err := e.BindBody(&newComment); err != nil {
+				return e.BadRequestError("Failed to read request body", err)
 			}
 
-			collection, err := app.Dao().FindCollectionByNameOrId("comments")
+			collection, err := app.FindCollectionByNameOrId("comments")
 			if err != nil {
 				return err
 			}
-			record := models.NewRecord(collection)
-			form := forms.NewRecordUpsert(app, record)
 
-			form.LoadData(map[string]any{
+			record := core.NewRecord(collection)
+			record.Load(map[string]any{
 				"uri":     newComment.Uri,
 				"author":  newComment.Author,
 				"email":   newComment.Email,
@@ -116,8 +111,8 @@ func main() {
 				"parent":  newComment.Parent,
 			})
 
-			// validate and submit (internally it calls app.Dao().SaveRecord(record) in a transaction)
-			if err := form.Submit(); err != nil {
+			err = app.Save(record)
+			if err != nil {
 				return err
 			}
 
@@ -150,12 +145,10 @@ func main() {
 				}()
 			}
 
-			return c.JSON(200, body)
-		},
-			apis.ActivityLogger(app),
-		)
+			return e.JSON(http.StatusOK, body)
+		})
 
-		return nil
+		return se.Next()
 	})
 
 	if err := app.Start(); err != nil {
