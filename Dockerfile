@@ -10,7 +10,7 @@ RUN mkdir /app
 ADD . /app
 WORKDIR /app
 RUN CGO_ENABLED=0 GOOS=linux go build -o pocketbase .
-RUN mkdir /output && mv /app/pocketbase /output
+RUN mkdir /output && mv /app/pocketbase /output && mv /app/views /output
 COPY --from=build-frontend /app/dist/assets/index.js /output/pb_public/comment.js
 
 FROM alpine:latest AS production
