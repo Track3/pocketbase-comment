@@ -1,67 +1,78 @@
-<script lang="ts">
-  import { getContext } from 'svelte';
-  import snarkdown from 'snarkdown';
-  import insane from 'insane';
-  export let parentId = "";
-  export let comments = [];
-  export let count: number;
-  export let formOpened = true;
-  let showPreview = false;
-  const reqUrl:string = getContext("reqUrl");
+<script>
+  import { getContext } from "svelte";
+  import snarkdown from "snarkdown";
+  import insane from "insane";
+  const config = getContext("config");
 
+  export let pid = "";
+  export let rid = "";
+  export let comments = [];
+  export let count;
+  export let formOpened = true;
+
+  let showPreview = false;
   let newComment = {
-    uri: getContext("pageUri"),
+    uri: config.pageUri,
     author: "",
     email: "",
     website: "",
     content: "",
-    parent: parentId
+    pid: pid,
+    rid: rid,
+    new: true,
   };
 
   async function sendComment() {
     const submitBtn = this.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
 
-    const response = await fetch(reqUrl, {
+    const response = await fetch(config.url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=UTF-8",
       },
-      body: JSON.stringify(newComment)
+      body: JSON.stringify(newComment),
     });
     const data = await response.json();
 
     // Put new comment to page
-    count++
-    if (parentId === "") {
-      comments = [{
-        id: data.id,
-        author: data.author,
-        avatar: data.avatar,
-        website: data.website,
-        content: data.content,
-        created: data.created,
-        reply: []
-      }, ...comments];
+    count++;
+    if (pid == "") {
+      comments = [
+        {
+          id: data.id,
+          author: data.author,
+          avatar: data.avatar,
+          website: data.website,
+          content: data.content,
+          created: data.created,
+          replies: [],
+          new: true,
+        },
+        ...comments,
+      ];
     } else {
-      const index = comments.findIndex(e => e.id === parentId)
-      comments[index].reply.push({
+      const index = comments.findIndex((e) => e.id == pid);
+      comments[index].replies.push({
         id: data.id,
         author: data.author,
         avatar: data.avatar,
         website: data.website,
         content: data.content,
         created: data.created,
+        pid: data.pid,
+        rid: data.rid,
+        new: true,
       });
-    };
+    }
     newComment.content = "";
     submitBtn.disabled = false;
-    formOpened=false;
-  };
+    formOpened = false;
+  }
 </script>
 
 <form class="comment-form" on:submit|preventDefault={sendComment}>
-  <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法）" rows="6" bind:value={newComment.content} required></textarea>
+  <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="6" bind:value={newComment.content} required></textarea>
   {#if showPreview}
   <div class="comment-preview">
     {@html insane(snarkdown(newComment.content))}

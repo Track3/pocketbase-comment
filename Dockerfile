@@ -5,7 +5,7 @@ RUN npm install
 COPY ./frontend/ .
 RUN npm run build
 
-FROM golang:1.25-alpine AS build-backend
+FROM golang:1.26-alpine AS build-backend
 RUN mkdir /app
 ADD . /app
 WORKDIR /app

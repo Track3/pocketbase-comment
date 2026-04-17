@@ -1,20 +1,14 @@
-<script lang="ts">
+<script>
   import Form from './Form.svelte';
   import snarkdown from 'snarkdown';
   import insane from 'insane';
-  export let parentId = "";
-  export let data;
-  export let comments = [];
-  export let count: number;
 
-  let fullDate: Date;
-  let displayDate: string;
-  $: fullDate = new Date(data.created);
-  $: displayDate = `${fullDate.getFullYear()}-${fullDate.getMonth()+1}-${fullDate.getDate()}`;
+  let { data, pid, comments = $bindable(), count = $bindable() } = $props();
+  let fullDate = $derived(new Date(data.created));
+  let displayDate = $derived(`${fullDate.getFullYear()}-${fullDate.getMonth()+1}-${fullDate.getDate()}`);
 </script>
 
-
-<article id="{data.id}">
+<article id={data.id} class:comment-new={data.new}>
   <aside class="comment-avatar">
     <img src="https://seccdn.libravatar.org/avatar/{data.avatar}?d=retro" alt="{data.author}的头像" loading="lazy">
   </aside>
@@ -25,7 +19,7 @@
       {:else}
       <span>{data.author}</span>
       {/if}
-      {#if data.is_mod}
+      {#if data.isMod}
       <small title="MOD">🚩</small>
       {/if}
       <span> &#183; </span>
@@ -34,9 +28,9 @@
     <main>
       {@html insane(snarkdown(data.content))}
     </main>
-    <button class="reply-btn" type="button" on:click={()=>{data.formOpened = !data.formOpened}}>{data.formOpened? "关闭" : "回复"}</button>
+    <button class="reply-btn" type="button" onclick={()=>{data.formOpened = !data.formOpened}}>{data.formOpened? "关闭" : "回复"}</button>
     {#if data.formOpened}
-    <Form parentId={parentId} bind:formOpened={data.formOpened} bind:comments={comments} bind:count={count}/>
+    <Form pid={pid} rid={data.id} bind:formOpened={data.formOpened} bind:comments={comments} bind:count={count}/>
     {/if}
   </div>
 </article>

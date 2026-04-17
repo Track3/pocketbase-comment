@@ -1,3 +1,7 @@
 .replies {
   margin-left: 2rem;
 }
+
+.comment-new {
+  border: 1px solid;
+}
