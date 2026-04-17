@@ -15,7 +15,6 @@ func SetupCommentNotification(app *pocketbase.PocketBase) {
 	app.OnRecordAfterCreateSuccess("comments").BindFunc(func(e *core.RecordEvent) error {
 
 		adminEmail := os.Getenv("COMMENT_ADMIN_EMAIL")
-		isMod := e.Record.GetBool("isMod")
 		data := map[string]string{
 			"siteName": os.Getenv("SITE_NAME"),
 			"siteURL":  os.Getenv("SITE_URL"),
@@ -26,7 +25,7 @@ func SetupCommentNotification(app *pocketbase.PocketBase) {
 		}
 
 		//通知管理员
-		if isMod == false {
+		if e.Record.GetBool("isMod") == false {
 			err := notifyAdmin(e, data, adminEmail)
 			if err != nil {
 				return err
@@ -40,8 +39,8 @@ func SetupCommentNotification(app *pocketbase.PocketBase) {
 			if err != nil {
 				return err
 			}
-			if (isMod == false) && (opRecord.GetString("notify") != "") {
-				opEmail := opRecord.GetString("email")
+			opEmail := opRecord.GetString("email")
+			if (opEmail != adminEmail) && (opRecord.GetString("notify") != "") {
 				data["opAuthor"] = opRecord.GetString("author")
 				data["opContent"] = opRecord.GetString("content")
 				err := notifyOP(e, data, opEmail)
