@@ -37,22 +37,12 @@
       >{#if count}<span>{count}</span>{/if}评论</strong
     >
   </p>
-  <p>
+  <p class="comment-pagination">
     {#if currentPage !== 1}
-      <button
-        onclick={() => {
-          currentPage--;
-          getComments();
-        }}>上一页</button
-      >
+      <button onclick={() => {currentPage--; getComments();}}>上一页</button>
     {/if}
     {#if comments.length >= commentsPerPage}
-      <button
-        onclick={() => {
-          currentPage++;
-          getComments();
-        }}>下一页</button
-      >
+      <button onclick={() => {currentPage++; getComments();}}>下一页</button>
     {/if}
   </p>
 </div>
@@ -75,3 +65,12 @@
     {/if}
   </div>
 {/each}
+
+<p class="comment-pagination">
+  {#if currentPage !== 1}
+    <button onclick={() => {currentPage--; getComments();}}>上一页</button>
+  {/if}
+  {#if comments.length >= commentsPerPage}
+    <button onclick={() => {currentPage++; getComments();}}>下一页</button>
+  {/if}
+</p>
