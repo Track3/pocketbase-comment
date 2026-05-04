@@ -33,9 +33,7 @@
 
 <div class="comment-header">
   <p>
-    <strong
-      >{#if count}<span>{count}</span>{/if}评论</strong
-    >
+    <strong>{#if count}<span>{count}</span>{/if}评论</strong>
   </p>
   <p class="comment-pagination">
     {#if currentPage !== 1}

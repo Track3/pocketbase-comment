@@ -74,32 +74,33 @@
 </script>
 
 <form class="comment-form" on:submit|preventDefault={sendComment}>
-  <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="6" bind:value={newComment.content} required></textarea>
-  {#if showPreview}
-  <div class="comment-preview">
-    {@html insane(snarkdown(newComment.content))}
-  </div>
-  {/if}
-  <div class=form-wrapper>
+  <fieldset>
+    <legend>添加评论</legend>
+    <div class="comment-info">
     <label for="author">
       名字<span class="required" aria-hidden="true">*</span>
-      <input type="text" name="author" id="author" autocomplete="username" placeholder="John Doe" bind:value={newComment.author} required>
+      <input type="text" name="author" id="author" autocomplete="username" bind:value={newComment.author} required>
     </label>
     <label for="email">
       邮箱<span class="required" aria-hidden="true">*</span>
-      <input type="email" name="email" id="email" autocomplete="email" placeholder="someone@example.com" bind:value={newComment.email} required>
+      <input type="email" name="email" id="email" autocomplete="email" bind:value={newComment.email} required>
     </label>
-  </div>
-  <label for="website">
-    网址
-    <input type="url" name="website" id="website" autocomplete="url" placeholder="https://example.com" bind:value={newComment.website}>
-  </label>
-  <div class=form-wrapper>
+    <label for="website">
+      网址
+      <input type="url" name="website" id="website" autocomplete="url" bind:value={newComment.website}>
+    </label>
+    </div>
+    <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} required></textarea>
+    {#if showPreview}
+    <div class="comment-preview">
+      {@html insane(snarkdown(newComment.content))}
+    </div>
+    {/if}
     <button type="button" on:click={()=>{showPreview = !showPreview}}>
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-eye"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> 预览
-    </button>
-    <button type="submit">
+    </button
+    ><button type="submit">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg> 发送
     </button>
-  </div>
+  </fieldset>
 </form>
