@@ -3,6 +3,7 @@ package main
 import (
 	"net/mail"
 	"os"
+	"strings"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -16,12 +17,13 @@ func SetupCommentNotification(app *pocketbase.PocketBase) {
 
 		adminEmail := os.Getenv("COMMENT_ADMIN_EMAIL")
 		data := map[string]string{
-			"siteName": os.Getenv("SITE_NAME"),
-			"siteURL":  os.Getenv("SITE_URL"),
-			"id":       e.Record.Id,
-			"uri":      e.Record.GetString("uri"),
-			"author":   e.Record.GetString("author"),
-			"content":  e.Record.GetString("content"),
+			"siteName":   os.Getenv("SITE_NAME"),
+			"siteURL":    os.Getenv("SITE_URL"),
+			"id":         e.Record.Id,
+			"uri":        e.Record.GetString("uri"),
+			"author":     e.Record.GetString("author"),
+			"content":    e.Record.GetString("content"),
+			"commentURL": strings.TrimRight(os.Getenv("SITE_URL"), "/") + e.Record.GetString("uri") + "#" + e.Record.Id,
 		}
 
 		//通知管理员
@@ -40,9 +42,10 @@ func SetupCommentNotification(app *pocketbase.PocketBase) {
 				return err
 			}
 			opEmail := opRecord.GetString("email")
-			if (opEmail != adminEmail) && (opRecord.GetString("notify") != "") {
+			if opEmail != adminEmail && opEmail != e.Record.GetString("email") && opRecord.GetString("notify") != "" {
 				data["opAuthor"] = opRecord.GetString("author")
 				data["opContent"] = opRecord.GetString("content")
+				data["unsubscribeURL"] = strings.TrimRight(e.App.Settings().Meta.AppURL, "/") + "/unsubscribe.html?token=" + opRecord.GetString("notify")
 				err := notifyOP(e, data, opEmail)
 				if err != nil {
 					return err

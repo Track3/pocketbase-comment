@@ -45,6 +45,14 @@ func SetupCommentAPI(app *pocketbase.PocketBase, se *core.ServeEvent) {
 	se.Router.POST("/api/comment", func(e *core.RequestEvent) error {
 		return PostComment(app, e)
 	})
+
+	se.Router.GET("/api/unsubscribe", func(e *core.RequestEvent) error {
+		return CheckUnsubscribeToken(app, e)
+	})
+
+	se.Router.POST("/api/unsubscribe", func(e *core.RequestEvent) error {
+		return PostUnsubscribe(app, e)
+	})
 }
 
 // GetComments 获取指定URI的评论列表
@@ -165,6 +173,106 @@ func PostComment(app *pocketbase.PocketBase, e *core.RequestEvent) error {
 		[]comment{},
 	}
 	return e.JSON(http.StatusOK, body)
+}
+
+// CheckUnsubscribeToken 检查退订页面的token是否有效
+func CheckUnsubscribeToken(app *pocketbase.PocketBase, e *core.RequestEvent) error {
+	token := e.Request.URL.Query().Get("token")
+	if token == "" {
+		return e.BadRequestError("Missing token", nil)
+	}
+
+	records, err := app.FindRecordsByFilter(
+		"comments",
+		"notify = {:token}",
+		"",
+		1,
+		0,
+		dbx.Params{"token": token},
+	)
+	if err != nil {
+		return err
+	}
+	if len(records) == 0 {
+		return e.NotFoundError("Token not found", nil)
+	}
+
+	return e.String(http.StatusOK, "Token is valid")
+}
+
+type unsubscribeRequest struct {
+	Token  string `json:"token"`
+	Action string `json:"action"`
+}
+
+type unsubscribeResult struct {
+	Message string `json:"message"`
+}
+
+// PostUnsubscribe 处理退订请求
+func PostUnsubscribe(app *pocketbase.PocketBase, e *core.RequestEvent) error {
+	req := new(unsubscribeRequest)
+	if err := e.BindBody(&req); err != nil {
+		return e.BadRequestError("Failed to read request body", err)
+	}
+	if req.Token == "" {
+		return e.BadRequestError("Missing token", nil)
+	}
+	if req.Action != "comment" && req.Action != "all" {
+		return e.BadRequestError("Invalid action", nil)
+	}
+
+	records, err := app.FindRecordsByFilter(
+		"comments",
+		"notify = {:token}",
+		"",
+		1,
+		0,
+		dbx.Params{"token": req.Token},
+	)
+	if err != nil {
+		return err
+	}
+	if len(records) == 0 {
+		return e.NotFoundError("Token not found", nil)
+	}
+
+	record := records[0]
+	if req.Action == "comment" {
+		record.Set("notify", "")
+		if err := app.Save(record); err != nil {
+			return err
+		}
+		return e.JSON(http.StatusOK, unsubscribeResult{Message: "已取消此评论的后续回复通知"})
+	}
+
+	email := record.GetString("email")
+	if email == "" {
+		return e.BadRequestError("Record email missing", nil)
+	}
+
+	records, err = app.FindRecordsByFilter(
+		"comments",
+		"email = {:email} && notify != ''",
+		"",
+		1000,
+		0,
+		dbx.Params{"email": email},
+	)
+	if err != nil {
+		return err
+	}
+
+	count := 0
+	for _, r := range records {
+		r.Set("notify", "")
+		if err := app.Save(r); err != nil {
+			return err
+		}
+		count++
+	}
+
+	return e.JSON(http.StatusOK, unsubscribeResult{Message: fmt.Sprintf("已取消%d条评论的后续回复通知", count)})
 }
 
 // calcMD5 计算字符串的MD5哈希值
