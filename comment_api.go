@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/md5"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/security"
 )
 
 type comment struct {
@@ -91,7 +91,7 @@ func GetComment(app *pocketbase.PocketBase, e *core.RequestEvent) error {
 			v.Id,
 			v.GetString("created"),
 			v.GetString("author"),
-			calcMD5(v.GetString("email")),
+			security.MD5(v.GetString("email")),
 			v.GetString("website"),
 			v.GetString("content"),
 			v.GetBool("isMod"),
@@ -106,7 +106,7 @@ func GetComment(app *pocketbase.PocketBase, e *core.RequestEvent) error {
 					v.Id,
 					v.GetString("created"),
 					v.GetString("author"),
-					calcMD5(v.GetString("email")),
+					security.MD5(v.GetString("email")),
 					v.GetString("website"),
 					v.GetString("content"),
 					v.GetBool("isMod"),
@@ -164,7 +164,7 @@ func PostComment(app *pocketbase.PocketBase, e *core.RequestEvent) error {
 		record.Id,
 		record.GetString("created"),
 		record.GetString("author"),
-		calcMD5(record.GetString("email")),
+		security.MD5(record.GetString("email")),
 		record.GetString("website"),
 		record.GetString("content"),
 		record.GetBool("isMod"),
@@ -273,10 +273,4 @@ func PostUnsubscribe(app *pocketbase.PocketBase, e *core.RequestEvent) error {
 	}
 
 	return e.JSON(http.StatusOK, unsubscribeResult{Message: fmt.Sprintf("已取消%d条评论的后续回复通知", count)})
-}
-
-// calcMD5 计算字符串的MD5哈希值
-func calcMD5(input string) string {
-	data := []byte(input)
-	return fmt.Sprintf("%x", md5.Sum(data))
 }
