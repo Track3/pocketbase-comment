@@ -45,7 +45,7 @@ func SetupCommentNotification(app *pocketbase.PocketBase) {
 			if opEmail != adminEmail && opEmail != e.Record.GetString("email") && opRecord.GetString("notify") != "" {
 				data["opAuthor"] = opRecord.GetString("author")
 				data["opContent"] = opRecord.GetString("content")
-				data["unsubscribeURL"] = strings.TrimRight(e.App.Settings().Meta.AppURL, "/") + "/unsubscribe.html?token=" + opRecord.GetString("notify")
+				data["unsubscribeURL"] = strings.TrimRight(e.App.Settings().Meta.AppURL, "/") + "/unsubscribe?token=" + opRecord.GetString("notify")
 				err := notifyOP(e, data, opEmail)
 				if err != nil {
 					return err

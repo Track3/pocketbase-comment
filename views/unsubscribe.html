@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>退订评论回复通知</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f7f8fb;
+        color: #111;
+        text-autospace: normal;
+      }
+      main {
+        max-width: 640px;
+        margin: 48px auto;
+        padding: 24px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 16px 40px rgba(16, 24, 40, 0.08);
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 1.7rem;
+      }
+      .button-group {
+        margin-top: 16px;
+      }
+      a.button {
+        display: inline-block;
+        padding: 12px 18px;
+        margin-right: 12px;
+        border: none;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #fff;
+        cursor: pointer;
+        font-size: 1rem;
+        text-decoration: none;
+        transition: background 0.2s;
+      }
+      a.button:hover {
+        background: #1d4ed8;
+      }
+      a.button.secondary {
+        background: #6b7280;
+        margin-left: 0;
+      }
+      a.button.secondary:hover {
+        background: #4b5563;
+      }
+      .notice {
+        margin-top: 24px;
+        padding: 16px;
+        border-radius: 10px;
+        background: #eef2ff;
+      }
+      .error {
+        color: #b91c1c;
+        padding: 16px;
+        border-radius: 10px;
+        background: #fee2e2;
+        margin-top: 16px;
+      }
+      .success {
+        color: #15803d;
+        padding: 16px;
+        border-radius: 10px;
+        background: #dcfce7;
+        margin-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>退订评论回复提醒</h1>
+      {{if .Error}}
+        <div class="error">
+          <p>{{.Error}}</p>
+        </div>
+      {{else if .Success}}
+        <div class="success">
+          <p>{{.Message}}</p>
+          <p>感谢您的使用。</p>
+        </div>
+      {{else}}
+        <p>请选择您要执行的退订操作：</p>
+        <div class="button-group">
+          <a href="/unsubscribe?token={{.Token}}&action=comment" class="button">
+            退订此评论的后续回复通知
+          </a>
+          <a href="/unsubscribe?token={{.Token}}&action=all" class="button secondary">
+            退订所有评论的后续回复通知
+          </a>
+        </div>
+        <div class="notice">
+          <p>若您希望继续收到回复提醒，请勿点击上述链接。</p>
+        </div>
+      {{end}}
+    </main>
+  </body>
+</html>

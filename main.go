@@ -19,6 +19,9 @@ func main() {
 		// 设置评论API
 		SetupCommentAPI(app, se)
 
+		// 设置退订通知路由
+		SetupUnsubscribeRoute(app, se)
+
 		return se.Next()
 	})
 
