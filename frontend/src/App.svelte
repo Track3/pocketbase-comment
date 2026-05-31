@@ -31,9 +31,11 @@
 
 <Form bind:comments bind:count />
 
+
+{#if count}
 <div class="comment-header">
   <p>
-    <strong>{#if count}<span>{count}</span>{/if}评论</strong>
+    <strong><span>{count}</span>评论</strong>
   </p>
   <p class="comment-pagination">
     {#if currentPage !== 1}
@@ -44,6 +46,7 @@
     {/if}
   </p>
 </div>
+{/if}
 
 {#await promise}
   <p>🍵 评论加载中……</p>
