@@ -1,79 +1,90 @@
 <script>
   import { getContext } from "svelte";
-  import snarkdown from "snarkdown";
-  import insane from "insane";
+  import { renderMarkdown } from "./markdown.js";
   const config = getContext("config");
 
-  export let pid = "";
-  export let rid = "";
-  export let comments = [];
-  export let count;
-  export let formOpened = true;
+  let { pid = "", rid = "", comments = $bindable([]), count = $bindable(), formOpened = $bindable(true) } = $props();
 
-  let showPreview = false;
-  let newComment = {
+  let showPreview = $state(false);
+  let newComment = $state({
     uri: config.pageUri,
     author: "",
     email: "",
     website: "",
     content: "",
-    pid: pid,
-    rid: rid,
-    new: true,
-  };
+  });
 
-  async function sendComment() {
-    const submitBtn = this.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
+  async function sendComment(e) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const submitBtn = form.querySelector('button[type="submit"]');
 
-    const response = await fetch(config.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json; charset=UTF-8",
-      },
-      body: JSON.stringify(newComment),
-    });
-    const data = await response.json();
-
-    // Put new comment to page
-    count++;
-    if (pid == "") {
-      comments = [
-        {
-          id: data.id,
-          author: data.author,
-          avatar: data.avatar,
-          website: data.website,
-          content: data.content,
-          created: data.created,
-          isMod: data.isMod,
-          replies: [],
-          new: true,
-        },
-        ...comments,
-      ];
-    } else {
-      const index = comments.findIndex((e) => e.id == pid);
-      comments[index].replies.push({
-        id: data.id,
-        author: data.author,
-        avatar: data.avatar,
-        website: data.website,
-        content: data.content,
-        created: data.created,
-        isMod: data.isMod,
-        pid: data.pid,
-        rid: data.rid,
-        new: true,
-      });
+    if (newComment.website && !/^https?:\/\//i.test(newComment.website)) {
+      alert("网址必须以 http:// 或 https:// 开头");
+      return;
     }
-    newComment.content = "";
-    submitBtn.disabled = false;
-    formOpened = false;
+
+    submitBtn.disabled = true;
+    try {
+      const response = await fetch(config.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8",
+        },
+        body: JSON.stringify({ ...newComment, pid, rid }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+
+      // Put new comment to page
+      count++;
+      if (pid === "") {
+        comments = [
+          {
+            id: data.id,
+            author: data.author,
+            avatar: data.avatar,
+            website: data.website,
+            content: data.content,
+            created: data.created,
+            isMod: data.isMod,
+            replies: [],
+            new: true,
+          },
+          ...comments,
+        ];
+      } else {
+        const index = comments.findIndex((c) => c.id === pid);
+        if (index !== -1) {
+          comments[index].replies = [
+            ...comments[index].replies,
+            {
+              id: data.id,
+              author: data.author,
+              avatar: data.avatar,
+              website: data.website,
+              content: data.content,
+              created: data.created,
+              isMod: data.isMod,
+              pid: data.pid,
+              rid: data.rid,
+              new: true,
+            },
+          ];
+        }
+      }
+      newComment.content = "";
+      formOpened = false;
+    } catch (err) {
+      console.error("评论发送失败:", err);
+      alert("评论发送失败，请重试");
+    } finally {
+      submitBtn.disabled = false;
+    }
   }
 </script>
 
-<form class="comment-form" on:submit|preventDefault={sendComment}>
+<form class="comment-form" onsubmit={sendComment}>
   <fieldset>
     <legend>添加评论</legend>
     <div class="comment-info">
@@ -93,10 +104,10 @@
     <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} required></textarea>
     {#if showPreview}
     <div class="comment-preview">
-      {@html insane(snarkdown(newComment.content))}
+      {@html renderMarkdown(newComment.content)}
     </div>
     {/if}
-    <button type="button" on:click={()=>{showPreview = !showPreview}}>
+    <button type="button" onclick={() => { showPreview = !showPreview; }}>
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-eye"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> 预览
     </button
     ><button type="submit">

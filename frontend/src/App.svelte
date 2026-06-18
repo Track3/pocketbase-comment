@@ -19,18 +19,32 @@
   );
 
   async function getComments() {
-    const response = await fetch(reqUrl);
-    const data = await response.json();
-    count = data.count;
-    comments = data.comments;
-    commentsPerPage = data.commentsPerPage;
+    try {
+      const response = await fetch(reqUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      count = data.count;
+      comments = data.comments;
+      commentsPerPage = data.commentsPerPage;
+    } catch (err) {
+      console.error("加载评论失败:", err);
+      throw err;
+    }
   }
 
-  let promise = getComments();
+  let promise = $state(getComments());
+
+  function changePage(delta) {
+    currentPage += delta;
+    promise = getComments();
+  }
+
+  function retry() {
+    promise = getComments();
+  }
 </script>
 
 <Form bind:comments bind:count />
-
 
 {#if count}
 <div class="comment-header">
@@ -38,11 +52,11 @@
     <strong><span>{count}</span>评论</strong>
   </p>
   <p class="comment-pagination">
-    {#if currentPage !== 1}
-      <button onclick={() => {currentPage--; getComments();}}>上一页</button>
+    {#if currentPage > 1}
+      <button onclick={() => changePage(-1)}>上一页</button>
     {/if}
     {#if comments.length >= commentsPerPage}
-      <button onclick={() => {currentPage++; getComments();}}>下一页</button>
+      <button onclick={() => changePage(1)}>下一页</button>
     {/if}
   </p>
 </div>
@@ -51,15 +65,20 @@
 {#await promise}
   <p>🍵 评论加载中……</p>
 {:catch error}
-  <p style="color: red">🚧 {error}</p>
+  <p style="color: red">🚧 评论加载失败</p>
+  <button onclick={retry}>重试</button>
 {/await}
 
-{#each comments as comment}
+{#if count === 0}
+  <p>暂无评论</p>
+{/if}
+
+{#each comments as comment (comment.id)}
   <div class="comment-group">
     <Entry data={comment} pid={comment.id} bind:comments bind:count />
-    {#if comment.replies != null && comment.replies.length > 0}
+    {#if comment.replies !== null && comment.replies.length > 0}
       <div class="replies">
-        {#each comment.replies as reply}
+        {#each comment.replies as reply (reply.id)}
           <Entry data={reply} pid={comment.id} bind:comments bind:count />
         {/each}
       </div>
@@ -68,10 +87,10 @@
 {/each}
 
 <p class="comment-pagination">
-  {#if currentPage !== 1}
-    <button onclick={() => {currentPage--; getComments();}}>上一页</button>
+  {#if currentPage > 1}
+    <button onclick={() => changePage(-1)}>上一页</button>
   {/if}
   {#if comments.length >= commentsPerPage}
-    <button onclick={() => {currentPage++; getComments();}}>下一页</button>
+    <button onclick={() => changePage(1)}>下一页</button>
   {/if}
 </p>
