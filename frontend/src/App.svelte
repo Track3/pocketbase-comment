@@ -63,14 +63,13 @@
 {/if}
 
 {#await promise}
-  <p>🍵 评论加载中……</p>
+  <p class="comment-status">🍵 评论加载中……</p>
 {:catch error}
-  <p style="color: red">🚧 评论加载失败</p>
-  <button onclick={retry}>重试</button>
+  <p class="comment-status"><span style="color: red">🚧 评论加载失败。</span> <button onclick={retry}>重试</button></p>
 {/await}
 
 {#if count === 0}
-  <p>暂无评论</p>
+  <p class="comment-status">暂无评论</p>
 {/if}
 
 {#each comments as comment (comment.id)}
