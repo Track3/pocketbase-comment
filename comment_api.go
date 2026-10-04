@@ -1,10 +1,17 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
@@ -26,13 +33,67 @@ type comment struct {
 }
 
 type newComment struct {
-	Uri     string `json:"uri"`
-	Author  string `json:"author"`
-	Email   string `json:"email"`
-	Website string `json:"website"`
-	Content string `json:"content"`
-	PId     string `json:"pid"`
-	RId     string `json:"rid"`
+	Uri            string `json:"uri"`
+	Author         string `json:"author"`
+	Email          string `json:"email"`
+	Website        string `json:"website"`
+	Content        string `json:"content"`
+	PId            string `json:"pid"`
+	RId            string `json:"rid"`
+	TurnstileToken string `json:"turnstileToken"`
+}
+
+const turnstileSiteverifyURL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+var (
+	errTurnstileNotConfigured = errors.New("Turnstile secret key is not configured")
+	errTurnstileRejected      = errors.New("Turnstile rejected the token")
+)
+
+type turnstileResponse struct {
+	Success bool `json:"success"`
+}
+
+func verifyTurnstile(ctx context.Context, token string) error {
+	secret := os.Getenv("TURNSTILE_SECRET_KEY")
+	if strings.TrimSpace(secret) == "" {
+		return errTurnstileNotConfigured
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	return verifyTurnstileRequest(ctx, client, turnstileSiteverifyURL, secret, token)
+}
+
+func verifyTurnstileRequest(ctx context.Context, client *http.Client, endpoint, secret, token string) error {
+	form := url.Values{
+		"secret":   {secret},
+		"response": {token},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("create Turnstile verification request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	response, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send Turnstile verification request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("Turnstile returned HTTP %d", response.StatusCode)
+	}
+
+	var result turnstileResponse
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&result); err != nil {
+		return fmt.Errorf("decode Turnstile response: %w", err)
+	}
+	if !result.Success {
+		return errTurnstileRejected
+	}
+
+	return nil
 }
 
 // SetupCommentAPI 设置评论相关的路由
@@ -127,6 +188,20 @@ func PostComment(app *pocketbase.PocketBase, e *core.RequestEvent) error {
 	newComment := new(newComment)
 	if err := e.BindBody(&newComment); err != nil {
 		return e.BadRequestError("Failed to read request body", err)
+	}
+
+	if strings.TrimSpace(newComment.TurnstileToken) == "" {
+		return e.BadRequestError("Turnstile token is required", nil)
+	}
+	if err := verifyTurnstile(e.Request.Context(), newComment.TurnstileToken); err != nil {
+		switch {
+		case errors.Is(err, errTurnstileNotConfigured):
+			return e.JSON(http.StatusServiceUnavailable, map[string]string{"message": "Comment verification is not configured"})
+		case errors.Is(err, errTurnstileRejected):
+			return e.BadRequestError("Turnstile verification failed", err)
+		default:
+			return e.JSON(http.StatusBadGateway, map[string]string{"message": "Comment verification is temporarily unavailable"})
+		}
 	}
 
 	collection, err := app.FindCollectionByNameOrId("comments")

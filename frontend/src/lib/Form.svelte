@@ -1,11 +1,16 @@
 <script>
   import { getContext } from "svelte";
   import { renderMarkdown } from "./markdown.js";
+  import { loadTurnstile } from "./turnstile.js";
   const config = getContext("config");
 
   let { pid = "", rid = "", comments = $bindable([]), count = $bindable(), formOpened = $bindable(true) } = $props();
 
   let showPreview = $state(false);
+  let turnstileContainer;
+  let turnstileWidgetId;
+  let turnstileResolve;
+  let turnstileReject;
   let newComment = $state({
     uri: config.pageUri,
     author: "",
@@ -13,6 +18,46 @@
     website: "",
     content: "",
   });
+
+  async function getTurnstileToken() {
+    if (!config.turnstileSiteKey) {
+      throw new Error("评论验证未配置 Site Key");
+    }
+
+    const turnstile = await loadTurnstile();
+    if (turnstileWidgetId === undefined) {
+      turnstileWidgetId = turnstile.render(turnstileContainer, {
+        sitekey: config.turnstileSiteKey,
+        size: "invisible",
+        execution: "execute",
+        callback: (token) => turnstileResolve?.(token),
+        "error-callback": () => turnstileReject?.(new Error("Turnstile 验证失败，请重试")),
+        "expired-callback": () => turnstileReject?.(new Error("Turnstile 验证已过期，请重试")),
+      });
+    } else {
+      turnstile.reset(turnstileWidgetId);
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(
+        () => turnstileReject?.(new Error("Turnstile 验证超时，请重试")),
+        120000,
+      );
+      turnstileResolve = (token) => {
+        clearTimeout(timeout);
+        turnstileResolve = undefined;
+        turnstileReject = undefined;
+        resolve(token);
+      };
+      turnstileReject = (error) => {
+        clearTimeout(timeout);
+        turnstileResolve = undefined;
+        turnstileReject = undefined;
+        reject(error);
+      };
+      turnstile.execute(turnstileWidgetId);
+    });
+  }
 
   async function sendComment(e) {
     e.preventDefault();
@@ -26,12 +71,13 @@
 
     submitBtn.disabled = true;
     try {
+      const turnstileToken = await getTurnstileToken();
       const response = await fetch(config.url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
         },
-        body: JSON.stringify({ ...newComment, pid, rid }),
+        body: JSON.stringify({ ...newComment, pid, rid, turnstileToken }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
@@ -77,7 +123,7 @@
       formOpened = false;
     } catch (err) {
       console.error("评论发送失败:", err);
-      alert("评论发送失败，请重试");
+      alert(err instanceof Error ? err.message : "评论发送失败，请重试");
     } finally {
       submitBtn.disabled = false;
     }
@@ -102,6 +148,7 @@
     </label>
     </div>
     <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} required></textarea>
+    <div bind:this={turnstileContainer}></div>
     {#if showPreview}
     <div class="comment-preview">
       {@html renderMarkdown(newComment.content)}

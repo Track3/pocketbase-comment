@@ -5,6 +5,7 @@
 
   const config = {
     url: document.getElementById("comments").dataset.url,
+    turnstileSiteKey: document.getElementById("comments").dataset.turnstileSitekey,
     pageUri: window.location.pathname,
   };
 
