@@ -1,5 +1,5 @@
 <script>
-  import { getContext } from "svelte";
+  import { getContext, onMount } from "svelte";
   import { renderMarkdown } from "./markdown.js";
   import { loadTurnstile } from "./turnstile.js";
   const config = getContext("config");
@@ -9,8 +9,13 @@
   let showPreview = $state(false);
   let turnstileContainer;
   let turnstileWidgetId;
-  let turnstileResolve;
-  let turnstileReject;
+  let turnstileWidgetPromise;
+  let turnstileWasExecuted = false;
+  let turnstileChallengePromise;
+  let turnstileChallengeResolve;
+  let turnstileChallengeReject;
+  let turnstileToken;
+  let turnstileTokenExpiresAt = 0;
   let newComment = $state({
     uri: config.pageUri,
     author: "",
@@ -19,43 +24,101 @@
     content: "",
   });
 
-  async function getTurnstileToken() {
+  function prepareTurnstileWidget() {
     if (!config.turnstileSiteKey) {
-      throw new Error("评论验证未配置 Site Key");
+      return Promise.reject(new Error("评论验证未配置 Site Key"));
     }
+    if (turnstileWidgetPromise) return turnstileWidgetPromise;
 
-    const turnstile = await loadTurnstile();
-    if (turnstileWidgetId === undefined) {
-      turnstileWidgetId = turnstile.render(turnstileContainer, {
-        sitekey: config.turnstileSiteKey,
-        size: "invisible",
-        execution: "execute",
-        callback: (token) => turnstileResolve?.(token),
-        "error-callback": () => turnstileReject?.(new Error("Turnstile 验证失败，请重试")),
-        "expired-callback": () => turnstileReject?.(new Error("Turnstile 验证已过期，请重试")),
+    turnstileWidgetPromise = loadTurnstile()
+      .then((turnstile) => {
+        if (turnstileWidgetId === undefined) {
+          turnstileWidgetId = turnstile.render(turnstileContainer, {
+            sitekey: config.turnstileSiteKey,
+            size: "invisible",
+            execution: "execute",
+            callback: (token) => {
+              turnstileToken = token;
+              turnstileTokenExpiresAt = Date.now() + 4 * 60 * 1000;
+              turnstileChallengeResolve?.(token);
+            },
+            "error-callback": () => turnstileChallengeReject?.(new Error("Turnstile 验证失败，请重试")),
+            "expired-callback": () => {
+              turnstileToken = undefined;
+              turnstileTokenExpiresAt = 0;
+              turnstileChallengeReject?.(new Error("Turnstile 验证已过期，请重试"));
+            },
+          });
+        }
+        return turnstile;
+      })
+      .catch((error) => {
+        turnstileWidgetPromise = undefined;
+        throw error;
       });
-    } else {
-      turnstile.reset(turnstileWidgetId);
-    }
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(
-        () => turnstileReject?.(new Error("Turnstile 验证超时，请重试")),
-        120000,
-      );
-      turnstileResolve = (token) => {
+    return turnstileWidgetPromise;
+  }
+
+  onMount(() => {
+    if (!config.turnstileSiteKey) return;
+    prepareTurnstileWidget().catch((error) => {
+      console.warn("Turnstile 预加载失败，提交时将重试:", error);
+    });
+  });
+
+  async function getTurnstileToken() {
+    const token = await requestTurnstileToken();
+    turnstileToken = undefined;
+    turnstileTokenExpiresAt = 0;
+    return token;
+  }
+
+  async function requestTurnstileToken() {
+    if (turnstileToken && Date.now() < turnstileTokenExpiresAt) return turnstileToken;
+    if (turnstileChallengePromise) return turnstileChallengePromise;
+
+    const turnstile = await prepareTurnstileWidget();
+    if (turnstileToken && Date.now() < turnstileTokenExpiresAt) return turnstileToken;
+    if (turnstileChallengePromise) return turnstileChallengePromise;
+
+    if (turnstileWasExecuted) turnstile.reset(turnstileWidgetId);
+
+    turnstileWasExecuted = true;
+    const challengePromise = new Promise((resolve, reject) => {
+      const clearChallenge = () => {
         clearTimeout(timeout);
-        turnstileResolve = undefined;
-        turnstileReject = undefined;
+        turnstileChallengeResolve = undefined;
+        turnstileChallengeReject = undefined;
+        turnstileChallengePromise = undefined;
+      };
+
+      const timeout = setTimeout(() => {
+        turnstileChallengeReject?.(new Error("Turnstile 验证超时，请重试"));
+      }, 120000);
+      turnstileChallengeResolve = (token) => {
+        clearChallenge();
         resolve(token);
       };
-      turnstileReject = (error) => {
-        clearTimeout(timeout);
-        turnstileResolve = undefined;
-        turnstileReject = undefined;
+      turnstileChallengeReject = (error) => {
+        clearChallenge();
         reject(error);
       };
+    });
+    turnstileChallengePromise = challengePromise;
+
+    try {
       turnstile.execute(turnstileWidgetId);
+    } catch (error) {
+      turnstileChallengeReject?.(error);
+    }
+
+    return challengePromise;
+  }
+
+  function warmTurnstileToken() {
+    requestTurnstileToken().catch((error) => {
+      console.warn("Turnstile 预验证失败，提交时将重试:", error);
     });
   }
 
@@ -136,18 +199,18 @@
     <div class="comment-info">
     <label for="author">
       名字<span class="required" aria-hidden="true">*</span>
-      <input type="text" name="author" id="author" autocomplete="username" bind:value={newComment.author} required>
+      <input type="text" name="author" id="author" autocomplete="username" bind:value={newComment.author} onfocus={warmTurnstileToken} required>
     </label>
     <label for="email">
       邮箱<span class="required" aria-hidden="true">*</span>
-      <input type="email" name="email" id="email" autocomplete="email" bind:value={newComment.email} required>
+      <input type="email" name="email" id="email" autocomplete="email" bind:value={newComment.email} onfocus={warmTurnstileToken} required>
     </label>
     <label for="website">
       网址
-      <input type="url" name="website" id="website" autocomplete="url" bind:value={newComment.website}>
+      <input type="url" name="website" id="website" autocomplete="url" bind:value={newComment.website} onfocus={warmTurnstileToken}>
     </label>
     </div>
-    <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} required></textarea>
+    <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} onfocus={warmTurnstileToken} required></textarea>
     <div bind:this={turnstileContainer}></div>
     {#if showPreview}
     <div class="comment-preview">
