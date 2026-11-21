@@ -1,15 +1,17 @@
 <script>
-  import { getContext, onMount } from "svelte";
+  import { getContext, onDestroy, onMount } from "svelte";
   import { renderMarkdown } from "./markdown.js";
-  import { getFCaptchaSession } from "./fcaptcha.js";
+  import { loadFCaptcha } from "./fcaptcha.js";
   const config = getContext("config");
-
-  const FCAPTCHA_ACTION = "comment";
-  const FCAPTCHA_TIMEOUT_MS = 60 * 1000;
 
   let { pid = "", rid = "", comments = $bindable([]), count = $bindable(), formOpened = $bindable(true) } = $props();
 
   let showPreview = $state(false);
+  let fcaptchaContainer;
+  let fcaptchaWidgetId;
+  let fcaptchaWidgetPromise;
+  let fcaptchaToken = "";
+  let fcaptchaHint = $state("");
   let newComment = $state({
     uri: config.pageUri,
     author: "",
@@ -18,93 +20,70 @@
     content: "",
   });
 
-  function prepareFCaptchaSession() {
-    // A single page-level session, started as early as possible (see main.js).
-    return getFCaptchaSession({
-      siteKey: config.fcaptchaSiteKey,
-      serverUrl: config.fcaptchaUrl,
-    });
+  function prepareFCaptchaWidget() {
+    if (!config.fcaptchaSiteKey) {
+      return Promise.reject(new Error("评论验证未配置 Site Key"));
+    }
+    if (fcaptchaWidgetId !== undefined) return Promise.resolve();
+    if (fcaptchaWidgetPromise) return fcaptchaWidgetPromise;
+
+    fcaptchaWidgetPromise = loadFCaptcha(config.fcaptchaUrl)
+      .then((fcaptcha) => {
+        fcaptchaWidgetId = fcaptcha.render(fcaptchaContainer, {
+          siteKey: config.fcaptchaSiteKey,
+          theme:
+            window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light",
+          // We post the token ourselves; don't add a hidden form field.
+          responseField: false,
+          callback: (token) => {
+            fcaptchaToken = token;
+            fcaptchaHint = "";
+          },
+          expiredCallback: () => {
+            fcaptchaToken = "";
+            fcaptchaHint = "人机验证已过期，请重新勾选";
+          },
+          errorCallback: () => {
+            fcaptchaToken = "";
+            fcaptchaHint = "人机验证失败，请重新勾选";
+          },
+        });
+      })
+      .catch((error) => {
+        fcaptchaWidgetPromise = undefined;
+        fcaptchaHint = "人机验证加载失败，请刷新页面重试";
+        throw error;
+      });
+
+    return fcaptchaWidgetPromise;
   }
 
-  function withTimeout(promise, ms, message) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(message)), ms);
-      promise.then(
-        (value) => {
-          clearTimeout(timer);
-          resolve(value);
-        },
-        (error) => {
-          clearTimeout(timer);
-          reject(error);
-        },
-      );
-    });
+  function resetFCaptchaWidget() {
+    fcaptchaToken = "";
+    fcaptchaHint = "";
+    if (fcaptchaWidgetId !== undefined && window.FCaptcha) {
+      window.FCaptcha.reset(fcaptchaWidgetId);
+    }
   }
 
   onMount(() => {
-    if (!config.fcaptchaSiteKey) return;
-    prepareFCaptchaSession().catch((error) => {
-      console.warn("FCaptcha 预加载失败，提交时将重试:", error);
+    if (!config.fcaptchaSiteKey) {
+      fcaptchaHint = "评论验证未配置 Site Key";
+      return;
+    }
+    prepareFCaptchaWidget().catch((error) => {
+      console.warn("FCaptcha 加载失败，提交时将重试:", error);
     });
   });
 
-  function fcaptchaErrorMessage(result) {
-    const corroborating = result?.experimental?.corroboratingCategories || [];
-    if (corroborating.includes("cdp")) {
-      return "人机验证触发了 FCaptcha 的 CDP 防自动化规则（疑似误判），请检查 FCaptcha 服务端策略";
+  onDestroy(() => {
+    if (fcaptchaWidgetId !== undefined && window.FCaptcha) {
+      window.FCaptcha.destroy(fcaptchaWidgetId);
     }
-    switch (result?.reason) {
-      case "hostname_not_allowed":
-        return "人机验证未允许当前域名，请检查 FCaptcha 的 FCAPTCHA_ALLOWED_HOSTNAMES 配置";
-      case "rate_limited":
-        return "验证请求过于频繁，请稍后再试";
-      case "pow_not_satisfied":
-        return "人机验证未完成，请稍后重试";
-      case "experimental_detection":
-        return "人机验证未通过，请稍后重试";
-      default:
-        return typeof result?.score === "number"
-          ? `人机验证未通过（评分 ${result.score.toFixed(2)}），请刷新页面后重试`
-          : "人机验证未通过，请重试";
-    }
-  }
-
-  async function getFCaptchaToken() {
-    const session = await prepareFCaptchaSession();
-
-    // Reuse the session across attempts: its behavioural and temporal
-    // collectors keep accumulating, and FCaptcha already fetches a fresh PoW
-    // challenge for every execute(). Destroying it after a rejection would
-    // throw away exactly the signals a retry needs.
-    let result;
-    try {
-      result = await withTimeout(
-        session.execute(FCAPTCHA_ACTION),
-        FCAPTCHA_TIMEOUT_MS,
-        "人机验证超时，请重试",
-      );
-    } catch (error) {
-      console.warn("FCaptcha 验证失败:", error);
-      if (error?.code === "server_unavailable") {
-        throw new Error("人机验证服务暂时不可用，请稍后重试");
-      }
-      throw error;
-    }
-
-    if (!result?.success || !result.token) {
-      console.warn("FCaptcha 验证被拒绝:", result);
-      throw new Error(fcaptchaErrorMessage(result));
-    }
-
-    return result.token;
-  }
-
-  function warmFCaptchaSession() {
-    prepareFCaptchaSession().catch((error) => {
-      console.warn("FCaptcha 预加载失败，提交时将重试:", error);
-    });
-  }
+    fcaptchaWidgetId = undefined;
+  });
 
   async function sendComment(e) {
     e.preventDefault();
@@ -116,9 +95,21 @@
       return;
     }
 
+    if (!fcaptchaToken) {
+      if (fcaptchaWidgetId === undefined) {
+        fcaptchaHint = "人机验证正在加载，请稍候再试";
+        prepareFCaptchaWidget().catch((error) => {
+          console.warn("FCaptcha 加载失败:", error);
+        });
+      } else {
+        fcaptchaHint = "请先勾选“我不是机器人”完成验证";
+        fcaptchaContainer?.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      return;
+    }
+
     submitBtn.disabled = true;
     try {
-      const fcaptchaToken = await getFCaptchaToken();
       const response = await fetch(config.url, {
         method: "POST",
         headers: {
@@ -126,7 +117,18 @@
         },
         body: JSON.stringify({ ...newComment, pid, rid, fcaptchaToken }),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        let message = `HTTP ${response.status}`;
+        try {
+          const body = await response.json();
+          if (body?.message) message = body.message;
+        } catch {}
+        if (response.status === 400 && /FCaptcha/i.test(message)) {
+          resetFCaptchaWidget();
+          throw new Error("人机验证失败或已过期，请重新勾选验证");
+        }
+        throw new Error(message);
+      }
       const data = await response.json();
 
       // Put new comment to page
@@ -168,6 +170,7 @@
       }
       newComment.content = "";
       formOpened = false;
+      resetFCaptchaWidget();
     } catch (err) {
       console.error("评论发送失败:", err);
       alert(err instanceof Error ? err.message : "评论发送失败，请重试");
@@ -183,18 +186,22 @@
     <div class="comment-info">
     <label for="author">
       名字<span class="required" aria-hidden="true">*</span>
-      <input type="text" name="author" id="author" autocomplete="username" bind:value={newComment.author} onfocus={warmFCaptchaSession} required>
+      <input type="text" name="author" id="author" autocomplete="username" bind:value={newComment.author} required>
     </label>
     <label for="email">
       邮箱<span class="required" aria-hidden="true">*</span>
-      <input type="email" name="email" id="email" autocomplete="email" bind:value={newComment.email} onfocus={warmFCaptchaSession} required>
+      <input type="email" name="email" id="email" autocomplete="email" bind:value={newComment.email} required>
     </label>
     <label for="website">
       网址
-      <input type="url" name="website" id="website" autocomplete="url" bind:value={newComment.website} onfocus={warmFCaptchaSession}>
+      <input type="url" name="website" id="website" autocomplete="url" bind:value={newComment.website}>
     </label>
     </div>
-    <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} onfocus={warmFCaptchaSession} required></textarea>
+    <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} required></textarea>
+    <div class="fcaptcha" style="margin: 1rem 0;" bind:this={fcaptchaContainer}></div>
+    {#if fcaptchaHint}
+    <p class="fcaptcha-hint" role="status" style="color: #b45309; font-size: 0.9em; margin: 0.25rem 0 0;">{fcaptchaHint}</p>
+    {/if}
     {#if showPreview}
     <div class="comment-preview">
       {@html renderMarkdown(newComment.content)}

@@ -4,7 +4,7 @@ A simple comment module for your static site, powered by PocketBase and Svelte.
 
 ## Human verification (FCaptcha)
 
-Comment submission is protected by a self-hosted [FCaptcha](https://github.com/WebDecoy/FCaptcha) instance in invisible mode. The widget script, the signal collection endpoint and token verification all live on your FCaptcha server.
+Comment submission is protected by a self-hosted [FCaptcha](https://github.com/WebDecoy/FCaptcha) instance using its **interactive checkbox widget** ("I'm not a robot"). The widget script, the signal collection endpoint and token verification all live on your FCaptcha server.
 
 1. Deploy FCaptcha and note its URL and verify credential (`FCAPTCHA_VERIFY_SECRET`, which defaults to `FCAPTCHA_SECRET`). Either leave `FCAPTCHA_ALLOWED_HOSTNAMES` unset or add the hostname of the site that embeds the comment widget.
 2. Configure the PocketBase server:
@@ -25,8 +25,8 @@ Comment submission is protected by a self-hosted [FCaptcha](https://github.com/W
 
    `data-fcaptcha-sitekey` is any label you choose (FCaptcha accepts any key unless `FCAPTCHA_SITE_KEYS` restricts them); it is not a secret. `data-fcaptcha-url` is optional and defaults to `https://fcaptcha.zak.ee`.
 
-   Load `fcaptcha.js` **synchronously before `comment.js`**. `comment.js` starts one invisible session for the page as soon as it is evaluated and shares it across the comment and reply forms. Having the FCaptcha script already present lets that happen before first paint; if it has to be fetched asynchronously, the session can start while the visitor is already moving the mouse, which trips FCaptcha's anti-CDP timing rule (see below).
+   Load `fcaptcha.js` **synchronously before `comment.js`** so the widget can render without waiting for an extra cross-origin fetch. If the script is missing, `comment.js` lazy-loads it as a fallback.
 
-The frontend opens one invisible session at page start so behavioural signals accumulate across the whole visit, including every reply form. On submission it requests a single-use token bound to the `comment` action and sends it as `fcaptchaToken`; the server verifies it against `POST <server>/api/token/verify` before saving the comment. The server rejects submissions if the verify secret is missing, the token is invalid or already used, or verification is unavailable.
+The frontend renders an FCaptcha checkbox inside the main comment form and every reply form. Clicking it verifies the visitor and returns a single-use token; the token is sent as `fcaptchaToken` with the comment and the server validates it against `POST <server>/api/token/verify` before saving. The widget handles its own failure/retry UI and token expiry, and the app resets it after each successful comment so the next one can be verified. The server rejects submissions if the verify secret is missing, the token is invalid or already used, or verification is unavailable.
 
 If the host page uses a Content Security Policy, allow the FCaptcha origin in `script-src` and `connect-src` (the widget posts signals to the captcha server).

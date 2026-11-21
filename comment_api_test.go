@@ -17,9 +17,8 @@ func TestVerifyFCaptchaRequest(t *testing.T) {
 		wantReject bool
 		wantErr    bool
 	}{
-		{"valid", http.StatusOK, map[string]any{"valid": true, "action": "comment", "score": 0.1}, false, false},
+		{"valid", http.StatusOK, map[string]any{"valid": true, "score": 0.1}, false, false},
 		{"invalid token", http.StatusOK, map[string]any{"valid": false, "reason": "invalid"}, true, false},
-		{"wrong action", http.StatusOK, map[string]any{"valid": true, "action": "login"}, true, false},
 		{"bad secret", http.StatusUnauthorized, map[string]any{"valid": false, "reason": "invalid_secret"}, false, true},
 		{"server error", http.StatusInternalServerError, map[string]any{}, false, true},
 	}

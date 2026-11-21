@@ -45,7 +45,6 @@ type newComment struct {
 
 const (
 	defaultFCaptchaURL = "https://fcaptcha.zak.ee"
-	fcaptchaAction     = "comment"
 )
 
 var (
@@ -130,11 +129,6 @@ func verifyFCaptchaRequest(ctx context.Context, client *http.Client, endpoint, s
 		return fmt.Errorf("decode FCaptcha response: %w", err)
 	}
 	if !result.Valid {
-		return errFCaptchaRejected
-	}
-	// The token is bound to the action it was requested for, so a token minted
-	// elsewhere on the same site cannot be replayed against the comment API.
-	if result.Action != fcaptchaAction {
 		return errFCaptchaRejected
 	}
 
