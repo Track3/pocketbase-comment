@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -33,64 +33,109 @@ type comment struct {
 }
 
 type newComment struct {
-	Uri            string `json:"uri"`
-	Author         string `json:"author"`
-	Email          string `json:"email"`
-	Website        string `json:"website"`
-	Content        string `json:"content"`
-	PId            string `json:"pid"`
-	RId            string `json:"rid"`
-	TurnstileToken string `json:"turnstileToken"`
+	Uri           string `json:"uri"`
+	Author        string `json:"author"`
+	Email         string `json:"email"`
+	Website       string `json:"website"`
+	Content       string `json:"content"`
+	PId           string `json:"pid"`
+	RId           string `json:"rid"`
+	FCaptchaToken string `json:"fcaptchaToken"`
 }
 
-const turnstileSiteverifyURL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-
-var (
-	errTurnstileNotConfigured = errors.New("Turnstile secret key is not configured")
-	errTurnstileRejected      = errors.New("Turnstile rejected the token")
+const (
+	defaultFCaptchaURL = "https://fcaptcha.zak.ee"
+	fcaptchaAction     = "comment"
 )
 
-type turnstileResponse struct {
-	Success bool `json:"success"`
+var (
+	errFCaptchaNotConfigured = errors.New("FCaptcha verify secret is not configured")
+	errFCaptchaRejected      = errors.New("FCaptcha rejected the token")
+)
+
+type fcaptchaVerifyRequest struct {
+	Token  string `json:"token"`
+	Secret string `json:"secret"`
 }
 
-func verifyTurnstile(ctx context.Context, token string) error {
-	secret := os.Getenv("TURNSTILE_SECRET_KEY")
-	if strings.TrimSpace(secret) == "" {
-		return errTurnstileNotConfigured
+type fcaptchaVerifyResponse struct {
+	Valid     bool    `json:"valid"`
+	Reason    string  `json:"reason"`
+	SiteKey   string  `json:"site_key"`
+	Score     float64 `json:"score"`
+	Action    string  `json:"action"`
+	Hostname  string  `json:"hostname"`
+	Timestamp int64   `json:"timestamp"`
+	CData     string  `json:"cdata"`
+}
+
+func fcaptchaVerifyURL() string {
+	serverURL := strings.TrimSpace(os.Getenv("FCAPTCHA_URL"))
+	if serverURL == "" {
+		serverURL = defaultFCaptchaURL
+	}
+	return strings.TrimRight(serverURL, "/") + "/api/token/verify"
+}
+
+func verifyFCaptcha(ctx context.Context, token string) error {
+	secret := strings.TrimSpace(os.Getenv("FCAPTCHA_VERIFY_SECRET"))
+	if secret == "" {
+		// FCaptcha falls back to FCAPTCHA_SECRET when no separate verify
+		// credential is configured, so do the same here.
+		secret = strings.TrimSpace(os.Getenv("FCAPTCHA_SECRET"))
+	}
+	if secret == "" {
+		return errFCaptchaNotConfigured
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	return verifyTurnstileRequest(ctx, client, turnstileSiteverifyURL, secret, token)
+	return verifyFCaptchaRequest(ctx, client, fcaptchaVerifyURL(), secret, token)
 }
 
-func verifyTurnstileRequest(ctx context.Context, client *http.Client, endpoint, secret, token string) error {
-	form := url.Values{
-		"secret":   {secret},
-		"response": {token},
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+func verifyFCaptchaRequest(ctx context.Context, client *http.Client, endpoint, secret, token string) error {
+	payload, err := json.Marshal(fcaptchaVerifyRequest{Token: token, Secret: secret})
 	if err != nil {
-		return fmt.Errorf("create Turnstile verification request: %w", err)
+		return fmt.Errorf("encode FCaptcha verification request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create FCaptcha verification request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 
 	response, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send Turnstile verification request: %w", err)
+		return fmt.Errorf("send FCaptcha verification request: %w", err)
 	}
 	defer response.Body.Close()
 
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("Turnstile returned HTTP %d", response.StatusCode)
+	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("read FCaptcha response: %w", err)
 	}
 
-	var result turnstileResponse
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&result); err != nil {
-		return fmt.Errorf("decode Turnstile response: %w", err)
+	// 401 means the configured verify secret is wrong, not that the visitor's
+	// token is bad, so surface it as a server-side failure.
+	if response.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("FCaptcha rejected the verify secret: %s", strings.TrimSpace(string(body)))
 	}
-	if !result.Success {
-		return errTurnstileRejected
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("FCaptcha returned HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var result fcaptchaVerifyResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("decode FCaptcha response: %w", err)
+	}
+	if !result.Valid {
+		return errFCaptchaRejected
+	}
+	// The token is bound to the action it was requested for, so a token minted
+	// elsewhere on the same site cannot be replayed against the comment API.
+	if result.Action != fcaptchaAction {
+		return errFCaptchaRejected
 	}
 
 	return nil
@@ -190,15 +235,15 @@ func PostComment(app *pocketbase.PocketBase, e *core.RequestEvent) error {
 		return e.BadRequestError("Failed to read request body", err)
 	}
 
-	if strings.TrimSpace(newComment.TurnstileToken) == "" {
-		return e.BadRequestError("Turnstile token is required", nil)
+	if strings.TrimSpace(newComment.FCaptchaToken) == "" {
+		return e.BadRequestError("FCaptcha token is required", nil)
 	}
-	if err := verifyTurnstile(e.Request.Context(), newComment.TurnstileToken); err != nil {
+	if err := verifyFCaptcha(e.Request.Context(), newComment.FCaptchaToken); err != nil {
 		switch {
-		case errors.Is(err, errTurnstileNotConfigured):
+		case errors.Is(err, errFCaptchaNotConfigured):
 			return e.JSON(http.StatusServiceUnavailable, map[string]string{"message": "Comment verification is not configured"})
-		case errors.Is(err, errTurnstileRejected):
-			return e.BadRequestError("Turnstile verification failed", err)
+		case errors.Is(err, errFCaptchaRejected):
+			return e.BadRequestError("FCaptcha verification failed", err)
 		default:
 			return e.JSON(http.StatusBadGateway, map[string]string{"message": "Comment verification is temporarily unavailable"})
 		}

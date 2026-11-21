@@ -3,9 +3,11 @@
   import Form from "./lib/Form.svelte";
   import Entry from "./lib/Entry.svelte";
 
+  const commentsEl = document.getElementById("comments");
   const config = {
-    url: document.getElementById("comments").dataset.url,
-    turnstileSiteKey: document.getElementById("comments").dataset.turnstileSitekey,
+    url: commentsEl.dataset.url,
+    fcaptchaSiteKey: commentsEl.dataset.fcaptchaSitekey,
+    fcaptchaUrl: commentsEl.dataset.fcaptchaUrl,
     pageUri: window.location.pathname,
   };
 

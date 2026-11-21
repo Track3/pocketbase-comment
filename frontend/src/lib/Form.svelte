@@ -1,21 +1,18 @@
 <script>
-  import { getContext, onMount } from "svelte";
+  import { getContext, onDestroy, onMount } from "svelte";
   import { renderMarkdown } from "./markdown.js";
-  import { loadTurnstile } from "./turnstile.js";
+  import { loadFCaptcha } from "./fcaptcha.js";
   const config = getContext("config");
+
+  const FCAPTCHA_ACTION = "comment";
+  const FCAPTCHA_TIMEOUT_MS = 60 * 1000;
 
   let { pid = "", rid = "", comments = $bindable([]), count = $bindable(), formOpened = $bindable(true) } = $props();
 
   let showPreview = $state(false);
-  let turnstileContainer;
-  let turnstileWidgetId;
-  let turnstileWidgetPromise;
-  let turnstileWasExecuted = false;
-  let turnstileChallengePromise;
-  let turnstileChallengeResolve;
-  let turnstileChallengeReject;
-  let turnstileToken;
-  let turnstileTokenExpiresAt = 0;
+  let fcaptchaSession;
+  let fcaptchaSessionPromise;
+  let fcaptchaDisposed = false;
   let newComment = $state({
     uri: config.pageUri,
     author: "",
@@ -24,101 +21,117 @@
     content: "",
   });
 
-  function prepareTurnstileWidget() {
-    if (!config.turnstileSiteKey) {
+  function prepareFCaptchaSession() {
+    if (!config.fcaptchaSiteKey) {
       return Promise.reject(new Error("评论验证未配置 Site Key"));
     }
-    if (turnstileWidgetPromise) return turnstileWidgetPromise;
+    if (fcaptchaSession) return Promise.resolve(fcaptchaSession);
+    if (fcaptchaSessionPromise) return fcaptchaSessionPromise;
 
-    turnstileWidgetPromise = loadTurnstile()
-      .then((turnstile) => {
-        if (turnstileWidgetId === undefined) {
-          turnstileWidgetId = turnstile.render(turnstileContainer, {
-            sitekey: config.turnstileSiteKey,
-            size: "invisible",
-            execution: "execute",
-            callback: (token) => {
-              turnstileToken = token;
-              turnstileTokenExpiresAt = Date.now() + 4 * 60 * 1000;
-              turnstileChallengeResolve?.(token);
-            },
-            "error-callback": () => turnstileChallengeReject?.(new Error("Turnstile 验证失败，请重试")),
-            "expired-callback": () => {
-              turnstileToken = undefined;
-              turnstileTokenExpiresAt = 0;
-              turnstileChallengeReject?.(new Error("Turnstile 验证已过期，请重试"));
-            },
-          });
+    // An invisible session starts collecting behavioural signals as soon as it
+    // is created, so the longer the visitor takes to write, the better the
+    // verdict. The token itself is only minted on submission.
+    fcaptchaSessionPromise = loadFCaptcha(config.fcaptchaUrl)
+      .then((fcaptcha) => {
+        const session = fcaptcha.invisible({
+          siteKey: config.fcaptchaSiteKey,
+          autoScore: false,
+        });
+        if (fcaptchaDisposed) {
+          session.destroy();
+          throw new Error("评论表单已关闭");
         }
-        return turnstile;
+        fcaptchaSession = session;
+        return session;
       })
       .catch((error) => {
-        turnstileWidgetPromise = undefined;
+        fcaptchaSessionPromise = undefined;
         throw error;
       });
 
-    return turnstileWidgetPromise;
+    return fcaptchaSessionPromise;
+  }
+
+  function withTimeout(promise, ms, message) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(message)), ms);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
   }
 
   onMount(() => {
-    if (!config.turnstileSiteKey) return;
-    prepareTurnstileWidget().catch((error) => {
-      console.warn("Turnstile 预加载失败，提交时将重试:", error);
+    if (!config.fcaptchaSiteKey) return;
+    prepareFCaptchaSession().catch((error) => {
+      console.warn("FCaptcha 预加载失败，提交时将重试:", error);
     });
   });
 
-  async function getTurnstileToken() {
-    const token = await requestTurnstileToken();
-    turnstileToken = undefined;
-    turnstileTokenExpiresAt = 0;
-    return token;
+  onDestroy(() => {
+    fcaptchaDisposed = true;
+    fcaptchaSession?.destroy();
+    fcaptchaSession = undefined;
+    fcaptchaSessionPromise = undefined;
+  });
+
+  function fcaptchaErrorMessage(result) {
+    switch (result?.reason) {
+      case "hostname_not_allowed":
+        return "人机验证未允许当前域名，请检查 FCaptcha 的 FCAPTCHA_ALLOWED_HOSTNAMES 配置";
+      case "rate_limited":
+        return "验证请求过于频繁，请稍后再试";
+      case "pow_not_satisfied":
+        return "人机验证未完成，请稍后重试";
+      case "experimental_detection":
+        return "人机验证未通过，请稍后重试";
+      default:
+        return typeof result?.score === "number"
+          ? `人机验证未通过（评分 ${result.score.toFixed(2)}），请刷新页面后重试`
+          : "人机验证未通过，请重试";
+    }
   }
 
-  async function requestTurnstileToken() {
-    if (turnstileToken && Date.now() < turnstileTokenExpiresAt) return turnstileToken;
-    if (turnstileChallengePromise) return turnstileChallengePromise;
+  async function getFCaptchaToken() {
+    const session = await prepareFCaptchaSession();
 
-    const turnstile = await prepareTurnstileWidget();
-    if (turnstileToken && Date.now() < turnstileTokenExpiresAt) return turnstileToken;
-    if (turnstileChallengePromise) return turnstileChallengePromise;
-
-    if (turnstileWasExecuted) turnstile.reset(turnstileWidgetId);
-
-    turnstileWasExecuted = true;
-    const challengePromise = new Promise((resolve, reject) => {
-      const clearChallenge = () => {
-        clearTimeout(timeout);
-        turnstileChallengeResolve = undefined;
-        turnstileChallengeReject = undefined;
-        turnstileChallengePromise = undefined;
-      };
-
-      const timeout = setTimeout(() => {
-        turnstileChallengeReject?.(new Error("Turnstile 验证超时，请重试"));
-      }, 120000);
-      turnstileChallengeResolve = (token) => {
-        clearChallenge();
-        resolve(token);
-      };
-      turnstileChallengeReject = (error) => {
-        clearChallenge();
-        reject(error);
-      };
-    });
-    turnstileChallengePromise = challengePromise;
-
+    // Reuse the session across attempts: its behavioural and temporal
+    // collectors keep accumulating, and FCaptcha already fetches a fresh PoW
+    // challenge for every execute(). Destroying it after a rejection would
+    // throw away exactly the signals a retry needs.
+    let result;
     try {
-      turnstile.execute(turnstileWidgetId);
+      result = await withTimeout(
+        session.execute(FCAPTCHA_ACTION),
+        FCAPTCHA_TIMEOUT_MS,
+        "人机验证超时，请重试",
+      );
     } catch (error) {
-      turnstileChallengeReject?.(error);
+      console.warn("FCaptcha 验证失败:", error);
+      if (error?.code === "server_unavailable") {
+        throw new Error("人机验证服务暂时不可用，请稍后重试");
+      }
+      throw error;
     }
 
-    return challengePromise;
+    if (!result?.success || !result.token) {
+      console.warn("FCaptcha 验证被拒绝:", result);
+      throw new Error(fcaptchaErrorMessage(result));
+    }
+
+    return result.token;
   }
 
-  function warmTurnstileToken() {
-    requestTurnstileToken().catch((error) => {
-      console.warn("Turnstile 预验证失败，提交时将重试:", error);
+  function warmFCaptchaSession() {
+    prepareFCaptchaSession().catch((error) => {
+      console.warn("FCaptcha 预加载失败，提交时将重试:", error);
     });
   }
 
@@ -134,13 +147,13 @@
 
     submitBtn.disabled = true;
     try {
-      const turnstileToken = await getTurnstileToken();
+      const fcaptchaToken = await getFCaptchaToken();
       const response = await fetch(config.url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
         },
-        body: JSON.stringify({ ...newComment, pid, rid, turnstileToken }),
+        body: JSON.stringify({ ...newComment, pid, rid, fcaptchaToken }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
@@ -199,19 +212,18 @@
     <div class="comment-info">
     <label for="author">
       名字<span class="required" aria-hidden="true">*</span>
-      <input type="text" name="author" id="author" autocomplete="username" bind:value={newComment.author} onfocus={warmTurnstileToken} required>
+      <input type="text" name="author" id="author" autocomplete="username" bind:value={newComment.author} onfocus={warmFCaptchaSession} required>
     </label>
     <label for="email">
       邮箱<span class="required" aria-hidden="true">*</span>
-      <input type="email" name="email" id="email" autocomplete="email" bind:value={newComment.email} onfocus={warmTurnstileToken} required>
+      <input type="email" name="email" id="email" autocomplete="email" bind:value={newComment.email} onfocus={warmFCaptchaSession} required>
     </label>
     <label for="website">
       网址
-      <input type="url" name="website" id="website" autocomplete="url" bind:value={newComment.website} onfocus={warmTurnstileToken}>
+      <input type="url" name="website" id="website" autocomplete="url" bind:value={newComment.website} onfocus={warmFCaptchaSession}>
     </label>
     </div>
-    <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} onfocus={warmTurnstileToken} required></textarea>
-    <div bind:this={turnstileContainer}></div>
+    <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} onfocus={warmFCaptchaSession} required></textarea>
     {#if showPreview}
     <div class="comment-preview">
       {@html renderMarkdown(newComment.content)}
