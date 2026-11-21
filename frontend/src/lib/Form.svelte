@@ -1,7 +1,7 @@
 <script>
-  import { getContext, onDestroy, onMount } from "svelte";
+  import { getContext, onMount } from "svelte";
   import { renderMarkdown } from "./markdown.js";
-  import { loadFCaptcha } from "./fcaptcha.js";
+  import { getFCaptchaSession } from "./fcaptcha.js";
   const config = getContext("config");
 
   const FCAPTCHA_ACTION = "comment";
@@ -10,9 +10,6 @@
   let { pid = "", rid = "", comments = $bindable([]), count = $bindable(), formOpened = $bindable(true) } = $props();
 
   let showPreview = $state(false);
-  let fcaptchaSession;
-  let fcaptchaSessionPromise;
-  let fcaptchaDisposed = false;
   let newComment = $state({
     uri: config.pageUri,
     author: "",
@@ -22,34 +19,11 @@
   });
 
   function prepareFCaptchaSession() {
-    if (!config.fcaptchaSiteKey) {
-      return Promise.reject(new Error("评论验证未配置 Site Key"));
-    }
-    if (fcaptchaSession) return Promise.resolve(fcaptchaSession);
-    if (fcaptchaSessionPromise) return fcaptchaSessionPromise;
-
-    // An invisible session starts collecting behavioural signals as soon as it
-    // is created, so the longer the visitor takes to write, the better the
-    // verdict. The token itself is only minted on submission.
-    fcaptchaSessionPromise = loadFCaptcha(config.fcaptchaUrl)
-      .then((fcaptcha) => {
-        const session = fcaptcha.invisible({
-          siteKey: config.fcaptchaSiteKey,
-          autoScore: false,
-        });
-        if (fcaptchaDisposed) {
-          session.destroy();
-          throw new Error("评论表单已关闭");
-        }
-        fcaptchaSession = session;
-        return session;
-      })
-      .catch((error) => {
-        fcaptchaSessionPromise = undefined;
-        throw error;
-      });
-
-    return fcaptchaSessionPromise;
+    // A single page-level session, started as early as possible (see main.js).
+    return getFCaptchaSession({
+      siteKey: config.fcaptchaSiteKey,
+      serverUrl: config.fcaptchaUrl,
+    });
   }
 
   function withTimeout(promise, ms, message) {
@@ -75,14 +49,11 @@
     });
   });
 
-  onDestroy(() => {
-    fcaptchaDisposed = true;
-    fcaptchaSession?.destroy();
-    fcaptchaSession = undefined;
-    fcaptchaSessionPromise = undefined;
-  });
-
   function fcaptchaErrorMessage(result) {
+    const corroborating = result?.experimental?.corroboratingCategories || [];
+    if (corroborating.includes("cdp")) {
+      return "人机验证触发了 FCaptcha 的 CDP 防自动化规则（疑似误判），请检查 FCaptcha 服务端策略";
+    }
     switch (result?.reason) {
       case "hostname_not_allowed":
         return "人机验证未允许当前域名，请检查 FCaptcha 的 FCAPTCHA_ALLOWED_HOSTNAMES 配置";

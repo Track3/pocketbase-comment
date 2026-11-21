@@ -19,11 +19,14 @@ Comment submission is protected by a self-hosted [FCaptcha](https://github.com/W
      data-fcaptcha-sitekey="pocketbase-comment"
      data-fcaptcha-url="https://fcaptcha.zak.ee"
    ></div>
+   <script src="https://fcaptcha.zak.ee/fcaptcha.js"></script>
    <script type="module" src="https://comments.example.com/comment.js"></script>
    ```
 
    `data-fcaptcha-sitekey` is any label you choose (FCaptcha accepts any key unless `FCAPTCHA_SITE_KEYS` restricts them); it is not a secret. `data-fcaptcha-url` is optional and defaults to `https://fcaptcha.zak.ee`.
 
-The frontend loads `<server>/fcaptcha.js` and opens an invisible session when the comment form mounts, so behavioural signals accumulate while the visitor writes. On submission it requests a single-use token bound to the `comment` action and sends it as `fcaptchaToken`; the server verifies it against `POST <server>/api/token/verify` before saving the comment. The server rejects submissions if the verify secret is missing, the token is invalid or already used, or verification is unavailable.
+   Load `fcaptcha.js` **synchronously before `comment.js`**. `comment.js` starts one invisible session for the page as soon as it is evaluated and shares it across the comment and reply forms. Having the FCaptcha script already present lets that happen before first paint; if it has to be fetched asynchronously, the session can start while the visitor is already moving the mouse, which trips FCaptcha's anti-CDP timing rule (see below).
+
+The frontend opens one invisible session at page start so behavioural signals accumulate across the whole visit, including every reply form. On submission it requests a single-use token bound to the `comment` action and sends it as `fcaptchaToken`; the server verifies it against `POST <server>/api/token/verify` before saving the comment. The server rejects submissions if the verify secret is missing, the token is invalid or already used, or verification is unavailable.
 
 If the host page uses a Content Security Policy, allow the FCaptcha origin in `script-src` and `connect-src` (the widget posts signals to the captcha server).
