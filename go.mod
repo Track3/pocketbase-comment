@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	ganigeorgiev.com/pocketbase/dbx v1.13.0
-	ganigeorgiev.com/pocketbase/pocketbase v0.41.1
+	ganigeorgiev.com/pocketbase/pocketbase v0.42.3
 )
 
 require (
@@ -30,15 +30,15 @@ require (
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
-	golang.org/x/crypto v0.58.0 // indirect
-	golang.org/x/image v0.47.0 // indirect
-	golang.org/x/net v0.62.0 // indirect
+	golang.org/x/crypto v0.59.0 // indirect
+	golang.org/x/image v0.48.0 // indirect
+	golang.org/x/net v0.63.0 // indirect
 	golang.org/x/oauth2 v0.38.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
-	modernc.org/libc v1.80.2 // indirect
+	golang.org/x/text v0.44.0 // indirect
+	modernc.org/libc v1.82.13 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.12.1 // indirect
-	modernc.org/sqlite v1.62.0 // indirect
+	modernc.org/memory v1.13.0 // indirect
+	modernc.org/sqlite v1.63.0 // indirect
 )
