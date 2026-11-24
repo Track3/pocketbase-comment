@@ -198,14 +198,14 @@
     </label>
     </div>
     <textarea name="content" placeholder="欢迎评论……（支持 Markdown 语法，电邮地址不会公开）" rows="8" bind:value={newComment.content} required></textarea>
-    <div class="fcaptcha" style="margin: 1rem 0;" bind:this={fcaptchaContainer}></div>
-    {#if fcaptchaHint}
-    <p class="fcaptcha-hint" role="status" style="color: #b45309; font-size: 0.9em; margin: 0.25rem 0 0;">{fcaptchaHint}</p>
-    {/if}
     {#if showPreview}
     <div class="comment-preview">
       {@html renderMarkdown(newComment.content)}
     </div>
+    {/if}
+    <div class="fcaptcha" style="margin: 1rem 0;" bind:this={fcaptchaContainer}></div>
+    {#if fcaptchaHint}
+    <p class="fcaptcha-hint" role="status" style="color: #b45309; font-size: 0.8em;">{fcaptchaHint}</p>
     {/if}
     <button type="button" onclick={() => { showPreview = !showPreview; }}>
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-eye"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> 预览
