@@ -19,14 +19,11 @@ Comment submission is protected by a self-hosted [FCaptcha](https://github.com/W
      data-fcaptcha-sitekey="pocketbase-comment"
      data-fcaptcha-url="https://fcaptcha.zak.ee"
    ></div>
-   <script src="https://fcaptcha.zak.ee/fcaptcha.js"></script>
    <script type="module" src="https://comments.example.com/comment.js"></script>
    ```
 
    `data-fcaptcha-sitekey` is any label you choose (FCaptcha accepts any key unless `FCAPTCHA_SITE_KEYS` restricts them); it is not a secret. `data-fcaptcha-url` is optional and defaults to `https://fcaptcha.zak.ee`.
 
-   Load `fcaptcha.js` **synchronously before `comment.js`** so the widget can render without waiting for an extra cross-origin fetch. If the script is missing, `comment.js` lazy-loads it as a fallback.
-
-The frontend renders an FCaptcha checkbox inside the main comment form and every reply form. Clicking it verifies the visitor and returns a single-use token; the token is sent as `fcaptchaToken` with the comment and the server validates it against `POST <server>/api/token/verify` before saving. The widget handles its own failure/retry UI and token expiry, and the app resets it after each successful comment so the next one can be verified. The server rejects submissions if the verify secret is missing, the token is invalid or already used, or verification is unavailable.
+The frontend loads `<server>/fcaptcha.js` when the comment form mounts and renders an FCaptcha checkbox inside the main comment form and every reply form. Clicking it verifies the visitor and returns a single-use token; the token is sent as `fcaptchaToken` with the comment and the server validates it against `POST <server>/api/token/verify` before saving. The widget handles its own failure/retry UI and token expiry, and the app resets it after each successful comment so the next one can be verified. The server rejects submissions if the verify secret is missing, the token is invalid or already used, or verification is unavailable.
 
 If the host page uses a Content Security Policy, allow the FCaptcha origin in `script-src` and `connect-src` (the widget posts signals to the captcha server).
