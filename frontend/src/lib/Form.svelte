@@ -203,7 +203,7 @@
       {@html renderMarkdown(newComment.content)}
     </div>
     {/if}
-    <div class="fcaptcha" style="margin: 1rem 0;" bind:this={fcaptchaContainer}></div>
+    <div class="fcaptcha" bind:this={fcaptchaContainer}></div>
     {#if fcaptchaHint}
     <p class="fcaptcha-hint" role="status" style="color: #b45309; font-size: 0.8em;">{fcaptchaHint}</p>
     {/if}
